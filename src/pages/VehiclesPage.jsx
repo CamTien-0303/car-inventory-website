@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { PageHeader, DataTable, LoadingState, ErrorState, Modal, RefreshButton } from '../components/common/ui';
-import { getVehicles, getVehicleByVin, createVehicle, updateVehicle, deleteVehicle, updateVehicleLocation } from '../services/vehicleService';
+import { getVehicles, getVehicleByVin, updateVehicle, deleteVehicle, updateVehicleLocation } from '../services/vehicleService';
+import { importVehicleTransaction } from '../services/transactionService';
+import { getProducts } from '../services/productService';
+import { getWarehouses } from '../services/warehouseService';
+import { getStaff } from '../services/staffService';
 import { normalizeVehicleDocument } from '../utils/normalizers';
 import { X } from 'lucide-react';
 
@@ -20,11 +24,20 @@ const VehiclesPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [submitLoading, setSubmitLoading] = useState(false);
 
-  const [formData, setFormData] = useState({
+  // Dropdown Options
+  const [products, setProducts] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [staffList, setStaffList] = useState([]);
+  const [isOptionsLoading, setIsOptionsLoading] = useState(false);
+
+  const initialFormData = {
     vin: '', engineNumber: '', chassisNumber: '',
-    productId: 0, warehouseId: 0, status: 'In_stock', currentLocationDetail: ''
-  });
+    productId: '', warehouseId: '', status: 'In_stock', currentLocationDetail: '',
+    importPrice: '', staffId: ''
+  };
+  const [formData, setFormData] = useState(initialFormData);
   const [locationData, setLocationData] = useState({ vin: '', currentLocationDetail: '', staffId: 1 });
 
   const loadData = async () => {
@@ -40,7 +53,26 @@ const VehiclesPage = () => {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  const loadOptions = async () => {
+    setIsOptionsLoading(true);
+    try {
+      const [prodRes, wareRes, staffRes] = await Promise.all([
+        getProducts(), getWarehouses(), getStaff()
+      ]);
+      setProducts(prodRes);
+      setWarehouses(wareRes);
+      setStaffList(staffRes);
+    } catch (err) {
+      console.error("Lỗi tải danh sách dropdown:", err);
+    } finally {
+      setIsOptionsLoading(false);
+    }
+  };
+
+  useEffect(() => { 
+    loadData(); 
+    loadOptions();
+  }, []);
 
   // Load vehicle detail when clicking a row
   const handleRowClick = async (row) => {
@@ -66,15 +98,26 @@ const VehiclesPage = () => {
   const handleOpenModal = (item = null) => {
     if (item) {
       setEditingItem(item);
-      setFormData({ ...item });
+      setFormData({ 
+        ...item, 
+        importPrice: '', 
+        staffId: '' 
+      });
     } else {
       setEditingItem(null);
-      setFormData({
-        vin: '', engineNumber: '', chassisNumber: '',
-        productId: 0, warehouseId: 0, status: 'In_stock', currentLocationDetail: ''
-      });
+      setFormData(initialFormData);
     }
     setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    if (!editingItem && formData.vin) {
+      if (!window.confirm('Bạn có thay đổi chưa lưu. Bạn có chắc chắn muốn đóng?')) {
+        return;
+      }
+    }
+    setIsModalOpen(false);
+    if (!editingItem) setFormData(initialFormData);
   };
 
   const handleSave = async (e) => {
@@ -83,18 +126,54 @@ const VehiclesPage = () => {
       alert('VIN phải đúng 17 ký tự.');
       return;
     }
+    if (!formData.productId || !formData.warehouseId) {
+      alert('Vui lòng chọn Mẫu xe và Kho/Bãi.');
+      return;
+    }
+    
+    const autoEngineNumber = formData.engineNumber || `ENG-${formData.vin}`;
+    const autoChassisNumber = formData.chassisNumber || `CHS-${formData.vin}`;
+
+    setSubmitLoading(true);
     try {
       if (editingItem) {
-        await updateVehicle(editingItem.vin, formData);
+        await updateVehicle(editingItem.vin, {
+          ...formData,
+          engineNumber: autoEngineNumber,
+          chassisNumber: autoChassisNumber
+        });
         alert('Cập nhật xe thành công.');
       } else {
-        await createVehicle(formData);
-        alert('Thêm xe thành công.');
+        if (!formData.staffId) {
+          alert('Vui lòng chọn Nhân viên nhập kho.');
+          setSubmitLoading(false);
+          return;
+        }
+        if (formData.importPrice !== '' && Number(formData.importPrice) < 0) {
+          alert('Giá nhập không được âm.');
+          setSubmitLoading(false);
+          return;
+        }
+        const payload = {
+           vin: formData.vin,
+           engineNumber: autoEngineNumber,
+           chassisNumber: autoChassisNumber,
+           productId: parseInt(formData.productId),
+           warehouseId: parseInt(formData.warehouseId),
+           importPrice: parseFloat(formData.importPrice) || 0,
+           staffId: parseInt(formData.staffId),
+           currentLocationDetail: formData.currentLocationDetail
+        };
+        await importVehicleTransaction(payload);
+        alert('Thêm xe và nhập kho thành công.');
       }
       setIsModalOpen(false);
+      setFormData(initialFormData);
       loadData();
     } catch (err) {
       alert('Lỗi: ' + err.message);
+    } finally {
+      setSubmitLoading(false);
     }
   };
 
@@ -324,8 +403,14 @@ const VehiclesPage = () => {
       )}
 
       {/* Create / Edit Vehicle Modal */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Sửa thông tin xe' : 'Thêm xe mới'}>
+      <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingItem ? 'Sửa thông tin xe' : 'Thêm xe mới'}>
         <form onSubmit={handleSave}>
+          {isOptionsLoading && !editingItem && (
+             <div style={{ marginBottom: '1rem', fontSize: '0.85rem', color: 'var(--color-primary)' }}>
+               Đang tải danh sách dữ liệu...
+             </div>
+          )}
+          
           <div className="form-group">
             <label>VIN (17 ký tự)</label>
             <input required className="input" minLength={17} maxLength={17}
@@ -337,34 +422,33 @@ const VehiclesPage = () => {
           </div>
           <div className="input-row">
             <div className="form-group">
-              <label>Engine Number</label>
-              <input required className="input" value={formData.engineNumber}
-                onChange={e => setFormData({...formData, engineNumber: e.target.value})}
-                placeholder="Số động cơ"
-              />
+              <label>Mẫu xe</label>
+              <select required className="select" value={formData.productId}
+                onChange={e => setFormData({...formData, productId: e.target.value})}
+              >
+                <option value="">-- Chọn mẫu xe --</option>
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {`${p.brand} ${p.modelName} ${p.year} - ${p.engineType} - ${p.baseColor}`}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
-              <label>Chassis Number</label>
-              <input required className="input" value={formData.chassisNumber}
-                onChange={e => setFormData({...formData, chassisNumber: e.target.value})}
-                placeholder="Số khung"
-              />
+              <label>Kho / Bãi</label>
+              <select required className="select" value={formData.warehouseId}
+                onChange={e => setFormData({...formData, warehouseId: e.target.value})}
+              >
+                <option value="">-- Chọn kho lưu trữ --</option>
+                {warehouses.map(w => (
+                  <option key={w.id} value={w.id}>
+                    {`${w.name} - Sức chứa: ${w.capacity}`}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
-          <div className="input-row">
-            <div className="form-group">
-              <label>Product ID</label>
-              <input required type="number" className="input" value={formData.productId}
-                onChange={e => setFormData({...formData, productId: parseInt(e.target.value) || 0})}
-              />
-            </div>
-            <div className="form-group">
-              <label>Warehouse ID</label>
-              <input required type="number" className="input" value={formData.warehouseId}
-                onChange={e => setFormData({...formData, warehouseId: parseInt(e.target.value) || 0})}
-              />
-            </div>
-          </div>
+          
           <div className="form-group">
             <label>Vị trí chi tiết</label>
             <input className="input" value={formData.currentLocationDetail}
@@ -372,9 +456,56 @@ const VehiclesPage = () => {
               placeholder="VD: Khu A - Hàng 3 - Ô 12"
             />
           </div>
+
+          {!editingItem ? (
+            <>
+              <div className="input-row">
+                <div className="form-group">
+                  <label>Nhân viên nhập kho</label>
+                  <select required className="select" value={formData.staffId}
+                    onChange={e => setFormData({...formData, staffId: e.target.value})}
+                  >
+                    <option value="">-- Chọn nhân viên --</option>
+                    {staffList.filter(s => s.status).map(s => (
+                      <option key={s.id} value={s.id}>
+                        {`${s.fullName} - ${s.departmentRole}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Giá nhập (₫)</label>
+                  <input type="number" min={0} className="input" value={formData.importPrice}
+                    onChange={e => setFormData({...formData, importPrice: e.target.value})}
+                    placeholder="VD: 850000000"
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Trạng thái</label>
+                <select className="select" disabled value="In_stock">
+                  <option value="In_stock">In_stock (Mặc định khi nhập)</option>
+                </select>
+              </div>
+            </>
+          ) : (
+            <div className="form-group">
+              <label>Trạng thái</label>
+              <select required className="select" value={formData.status}
+                onChange={e => setFormData({...formData, status: e.target.value})}
+              >
+                <option value="In_stock">In_stock</option>
+                <option value="Reserved">Reserved</option>
+                <option value="Sold">Sold</option>
+              </select>
+            </div>
+          )}
+
           <div className="modal-footer">
-            <button type="button" className="btn btn-outline" onClick={() => setIsModalOpen(false)}>Hủy</button>
-            <button type="submit" className="btn btn-primary">Lưu</button>
+            <button type="button" className="btn btn-outline" onClick={handleCloseModal} disabled={submitLoading}>Hủy</button>
+            <button type="submit" className="btn btn-primary" disabled={submitLoading || isOptionsLoading}>
+              {submitLoading ? 'Đang lưu...' : 'Lưu'}
+            </button>
           </div>
         </form>
       </Modal>
