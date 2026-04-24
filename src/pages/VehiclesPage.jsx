@@ -6,7 +6,8 @@ import { getProducts } from '../services/productService';
 import { getWarehouses } from '../services/warehouseService';
 import { getStaff } from '../services/staffService';
 import { normalizeVehicleDocument } from '../utils/normalizers';
-import { X } from 'lucide-react';
+import { X, Copy, QrCode } from 'lucide-react';
+import { paymentConfig } from '../config/paymentConfig';
 
 const VehiclesPage = () => {
   const [data, setData] = useState([]);
@@ -25,6 +26,11 @@ const VehiclesPage = () => {
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [submitLoading, setSubmitLoading] = useState(false);
+
+  // QR Payment Modal
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [qrVehicle, setQrVehicle] = useState(null);
+  const [qrAmount, setQrAmount] = useState('50000000');
 
   // Dropdown Options
   const [products, setProducts] = useState([]);
@@ -221,19 +227,46 @@ const VehiclesPage = () => {
     { header: 'Warehouse ID', key: 'warehouseId' },
     { header: 'Status', key: 'status', render: (row) => getStatusBadge(row.status) },
     { header: 'Location', key: 'currentLocationDetail' },
-    { header: 'Move', key: 'move', render: (row) => (
-      <button
-        className="btn btn-outline btn-sm"
-        onClick={(e) => {
-          e.stopPropagation();
-          setLocationData({ vin: row.vin, currentLocationDetail: row.currentLocationDetail || '', staffId: 1 });
-          setIsLocationModalOpen(true);
-        }}
-      >
-        Di chuyển
-      </button>
+    { header: 'Thao tác', key: 'actions', render: (row) => (
+      <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <button
+          className="btn btn-outline btn-sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            setLocationData({ vin: row.vin, currentLocationDetail: row.currentLocationDetail || '', staffId: 1 });
+            setIsLocationModalOpen(true);
+          }}
+        >
+          Di chuyển
+        </button>
+        <button
+          className="btn btn-primary btn-sm"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setQrVehicle(row);
+            setQrAmount('50000000');
+            setIsQrModalOpen(true);
+          }}
+        >
+          <QrCode size={14} />
+          QR
+        </button>
+      </div>
     )},
   ];
+
+  const handleCopy = (text, message) => {
+    navigator.clipboard.writeText(text);
+    alert(message || 'Đã copy vào clipboard!');
+  };
+
+  const getQrUrl = () => {
+    if (!qrVehicle) return '';
+    const amountNum = Number(qrAmount) || 0;
+    const content = encodeURIComponent(`COC ${qrVehicle.vin}`);
+    return `https://img.vietqr.io/image/${paymentConfig.bankId}-${paymentConfig.accountNumber}-compact.jpg?amount=${amountNum}&addInfo=${content}&accountName=${encodeURIComponent(paymentConfig.accountName)}`;
+  };
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadData} />;
@@ -535,6 +568,129 @@ const VehiclesPage = () => {
             <button type="submit" className="btn btn-primary">Cập nhật</button>
           </div>
         </form>
+      </Modal>
+
+      {/* QR Payment Modal */}
+      <Modal isOpen={isQrModalOpen} onClose={() => setIsQrModalOpen(false)} title="Thanh toán đặt cọc xe">
+        {qrVehicle && (
+          <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ width: '100%', marginBottom: '1rem', backgroundColor: 'var(--bg-surface-2)', padding: '1rem', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>VIN:</span>
+                <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{qrVehicle.vin}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Trạng thái:</span>
+                <span>{getStatusBadge(qrVehicle.status)}</span>
+              </div>
+            </div>
+
+            <div className="form-group" style={{ width: '100%', marginBottom: '1rem' }}>
+              <label>Số tiền thanh toán (VNĐ)</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="number"
+                  className="input"
+                  min="1"
+                  required
+                  value={qrAmount}
+                  onChange={(e) => setQrAmount(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <button 
+                  className="btn btn-outline" 
+                  onClick={() => handleCopy(qrAmount, 'Đã copy số tiền!')}
+                  title="Copy số tiền"
+                >
+                  <Copy size={16} />
+                </button>
+              </div>
+              {Number(qrAmount) > 500000000 && (
+                <span style={{ color: 'var(--color-warning)', fontSize: '0.8rem', marginTop: '0.25rem', display: 'block' }}>
+                  Lưu ý: Số tiền khá lớn (&gt;500tr), ngân hàng có thể yêu cầu hạn mức cao.
+                </span>
+              )}
+              {Number(qrAmount) <= 0 && (
+                <span style={{ color: 'var(--color-danger)', fontSize: '0.8rem', marginTop: '0.25rem', display: 'block' }}>
+                  Số tiền phải lớn hơn 0.
+                </span>
+              )}
+            </div>
+
+            <div className="form-group" style={{ width: '100%', marginBottom: '1rem' }}>
+              <label>Nội dung chuyển khoản</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="text"
+                  className="input"
+                  readOnly
+                  value={`COC ${qrVehicle.vin}`}
+                  style={{ flex: 1, backgroundColor: 'var(--bg-surface-2)', fontFamily: 'monospace' }}
+                />
+                <button 
+                  className="btn btn-outline" 
+                  onClick={() => handleCopy(`COC ${qrVehicle.vin}`, 'Đã copy nội dung chuyển khoản!')}
+                  title="Copy nội dung"
+                >
+                  <Copy size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div style={{ 
+              marginTop: '1rem', 
+              padding: '1rem', 
+              border: '2px dashed var(--border-color)', 
+              borderRadius: '12px',
+              backgroundColor: 'white',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center'
+            }}>
+              {Number(qrAmount) > 0 ? (
+                <>
+                  <img 
+                    src={getQrUrl()} 
+                    alt="VietQR Payment Code" 
+                    style={{ width: '250px', height: '250px', objectFit: 'contain' }}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'block';
+                    }}
+                  />
+                  <div style={{ display: 'none', color: 'var(--color-danger)', textAlign: 'center', padding: '2rem 0' }}>
+                    Không thể tải mã QR.<br/>Vui lòng kiểm tra lại kết nối hoặc cấu hình thanh toán.
+                  </div>
+                  <div style={{ marginTop: '1rem', textAlign: 'center', fontSize: '0.9rem', color: '#333' }}>
+                    <div><strong>{paymentConfig.bankId}</strong> - <strong>{paymentConfig.accountNumber}</strong></div>
+                    <div>{paymentConfig.accountName}</div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ padding: '3rem 1rem', color: 'var(--text-secondary)' }}>
+                  Vui lòng nhập số tiền hợp lệ để tạo QR
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer" style={{ width: '100%', marginTop: '2rem' }}>
+              <button className="btn btn-outline" onClick={() => setIsQrModalOpen(false)}>Đóng</button>
+              {Number(qrAmount) > 0 && (
+                <button 
+                  className="btn btn-primary" 
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = getQrUrl();
+                    link.download = `QR_COC_${qrVehicle.vin}.jpg`;
+                    link.click();
+                  }}
+                >
+                  Tải QR
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
