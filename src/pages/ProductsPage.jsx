@@ -6,6 +6,7 @@ const ProductsPage = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -84,6 +85,12 @@ const ProductsPage = () => {
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadData} />;
 
+  const filteredData = data.filter(item => 
+    (item.brand || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.modelName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.engineType || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div>
       <PageHeader
@@ -93,7 +100,17 @@ const ProductsPage = () => {
         onAction={() => handleOpenModal()}
         extra={<RefreshButton onClick={loadData} />}
       />
-      <DataTable columns={columns} data={data} onEdit={handleOpenModal} onDelete={handleDelete} keyExtractor={r => r.id} />
+      <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+        <input 
+          type="text" 
+          className="input" 
+          placeholder="Tìm kiếm hãng, mẫu xe..." 
+          value={searchTerm} 
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ width: '250px' }}
+        />
+      </div>
+      <DataTable columns={columns} data={filteredData} onEdit={handleOpenModal} onDelete={handleDelete} keyExtractor={r => r.id} />
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Sửa sản phẩm' : 'Thêm sản phẩm'}>
         <form onSubmit={handleSave}>

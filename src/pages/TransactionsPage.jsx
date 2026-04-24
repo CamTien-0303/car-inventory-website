@@ -6,6 +6,7 @@ const TransactionsPage = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -107,6 +108,11 @@ const TransactionsPage = () => {
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadData} />;
 
+  const filteredData = data.filter(item => 
+    (item.vin || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.type || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div>
       <PageHeader
@@ -121,7 +127,18 @@ const TransactionsPage = () => {
         }
       />
 
-      <DataTable columns={columns} data={data} keyExtractor={r => r.id} />
+      <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+        <input 
+          type="text" 
+          className="input" 
+          placeholder="Tìm kiếm VIN, loại (Import/Export)..." 
+          value={searchTerm} 
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ width: '250px' }}
+        />
+      </div>
+
+      <DataTable columns={columns} data={filteredData} keyExtractor={r => r.id} />
 
       {/* IMPORT MODAL */}
       <Modal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} title="Nhập xe vào kho">

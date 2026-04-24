@@ -8,6 +8,7 @@ const VehiclesPage = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Detail panel
   const [selectedVin, setSelectedVin] = useState(null);
@@ -128,8 +129,8 @@ const VehiclesPage = () => {
   const getStatusBadge = (status) => {
     const s = (status || '').replace('_', ' ');
     if (status === 'In_stock' || status === 'In_Stock') return <span className="badge badge-success">{s}</span>;
-    if (status === 'Sold') return <span className="badge badge-warning">{s}</span>;
-    if (status === 'Reserved') return <span className="badge badge-info">{s}</span>;
+    if (status === 'Reserved') return <span className="badge badge-warning">{s}</span>;
+    if (status === 'Sold') return <span className="badge badge-neutral">{s}</span>;
     return <span className="badge badge-neutral">{s}</span>;
   };
 
@@ -158,6 +159,12 @@ const VehiclesPage = () => {
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadData} />;
 
+  const filteredData = data.filter(item => 
+    (item.vin || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.currentLocationDetail || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.status || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div>
       <PageHeader
@@ -168,9 +175,20 @@ const VehiclesPage = () => {
         extra={<RefreshButton onClick={loadData} />}
       />
 
+      <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+        <input 
+          type="text" 
+          className="input" 
+          placeholder="Tìm kiếm VIN, vị trí, trạng thái..." 
+          value={searchTerm} 
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ width: '250px' }}
+        />
+      </div>
+
       <DataTable
         columns={columns}
-        data={data}
+        data={filteredData}
         onEdit={handleOpenModal}
         onDelete={handleDelete}
         onRowClick={handleRowClick}

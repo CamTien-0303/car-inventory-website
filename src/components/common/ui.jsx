@@ -184,3 +184,16 @@ export const RefreshButton = ({ onClick, loading = false }) => (
     {loading ? '⏳' : '🔄'} Refresh
   </button>
 );
+
+/* ================================================================
+   EmptyState — Standalone empty state message
+   ================================================================ */
+export const EmptyState = ({ title = 'Không có dữ liệu', message = 'Không tìm thấy kết quả nào phù hợp.' }) => (
+  <div className="state-container">
+    <div className="table-empty-icon">
+      <Inbox size={40} strokeWidth={1.2} />
+    </div>
+    <p style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.9375rem' }}>{title}</p>
+    <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>{message}</p>
+  </div>
+);

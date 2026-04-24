@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PageHeader, DataTable, LoadingState, ErrorState, RefreshButton } from '../components/common/ui';
+import { PageHeader, DataTable, LoadingState, ErrorState, RefreshButton, EmptyState } from '../components/common/ui';
 import { getInventoryAgingReport } from '../services/reportService';
 import { AlertTriangle } from 'lucide-react';
 
@@ -53,6 +53,7 @@ const ReportsPage = () => {
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadData} />;
+  if (!data || data.length === 0) return <EmptyState title="Không có dữ liệu" message="Không có xe nào đang tồn kho." />;
 
   return (
     <div>

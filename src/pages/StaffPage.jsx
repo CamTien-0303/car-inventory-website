@@ -6,6 +6,7 @@ const StaffPage = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -93,6 +94,13 @@ const StaffPage = () => {
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadData} />;
 
+  const filteredData = data.filter(item => 
+    (item.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.departmentRole || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.phone || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div>
       <PageHeader
@@ -102,7 +110,19 @@ const StaffPage = () => {
         onAction={() => handleOpenModal()}
         extra={<RefreshButton onClick={loadData} />}
       />
-      <DataTable columns={columns} data={data} onEdit={handleOpenModal} onDelete={handleDelete} keyExtractor={r => r.id} />
+
+      <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+        <input 
+          type="text" 
+          className="input" 
+          placeholder="Tìm kiếm nhân viên..." 
+          value={searchTerm} 
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ width: '250px' }}
+        />
+      </div>
+
+      <DataTable columns={columns} data={filteredData} onEdit={handleOpenModal} onDelete={handleDelete} keyExtractor={r => r.id} />
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingItem ? 'Sửa nhân viên' : 'Thêm nhân viên mới'}>
         <form onSubmit={handleSave}>
